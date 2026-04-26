@@ -1,3 +1,4 @@
+#include "yara.hpp"
 #include <sys/fanotify.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -9,28 +10,6 @@
 #include <sstream>
 
 using namespace std;
-
-class Rule;
-string trim(const string& str);
-bool scanFile(const string& filePath, Rule& rule);
-
-class Rule {
-    private:
-        string _name;
-        unordered_map<string, string> _strings;
-        unordered_map<string, bool> _boolean;
-        string _condition;
-    public:
-        void setName(string name) { _name = name; }
-        void addString(string id, string value){ _strings[id] = value; }
-        void addBool(string id, bool boolean){ _boolean[id] = boolean; }
-        void setCondition(string condition){ _condition = condition; }
-        unordered_map<string, string>& getStrings(){ return(_strings); }
-        string& getCondition(){ return(_condition); }
-        bool getBool(string id) { return _boolean[id]; }
-        string getRuleName() { return _name; }
-        void clearResults() { _boolean.clear(); }
-};
 
 int main(int argc, char* argv[]) 
 {
