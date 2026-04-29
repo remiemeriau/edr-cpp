@@ -8,7 +8,8 @@
 #include <unordered_map>
 #include <algorithm>
 #include <sstream>
-
+#include <vector>   // std::vector is used to store multiple rules from the .yar file look : https://en.cppreference.com/w/cpp/container/vector
+                
 using namespace std;
 
 int main(int argc, char* argv[]) 
@@ -21,7 +22,14 @@ int main(int argc, char* argv[])
     string directoryPath = argv[1];
     string rulePath = argv[2];
 
-    Rule rule;
+    // We use std::vector<Rule> because one Rule object can only store a single rule
+    // Our .yar file can contain many rules (example: SimpleMalware + ransomware)
+    // vector lets us load all rules once at startup and keep them in memory
+    // Then, every time a file is modified, we can quickly check it against ALL rules
+    // without having to reopen and reparse the rule file again (wich was the case before)
+    // See: https://en.cppreference.com/w/cpp/container/vector
+
+    vector<Rule> rules;
     ifstream ruleFile(rulePath);
     if (!ruleFile.is_open()) {
         cerr << "Error: Could not open rule file." << endl;
@@ -30,14 +38,24 @@ int main(int argc, char* argv[])
 
     string line, firstWord, conditionLines;
     bool inStrings(false), inCondition(false);
+    Rule currentRule;
 
     while(getline(ruleFile, line)){
         istringstream fromLineToWord(line);
         fromLineToWord >> firstWord;
         if(firstWord == "rule") {
+            if (!currentRule.getRuleName().empty()) {
+                conditionLines.erase(remove(conditionLines.begin(), conditionLines.end(), '}'), conditionLines.end());
+                currentRule.setCondition(trim(conditionLines));
+                rules.push_back(currentRule);
+                currentRule = Rule();
+                conditionLines = "";
+                inStrings = false;
+                inCondition = false;
+            }
             string ruleName;
             fromLineToWord >> ruleName;
-            rule.setName(ruleName);
+            currentRule.setName(ruleName);
         }
         if(inStrings){
             if(firstWord == "condition:"){
@@ -47,7 +65,7 @@ int main(int argc, char* argv[])
                 if (equalPosition != string::npos) {
                     string id = trim(line.substr(0, equalPosition));
                     string value = trim(line.substr(equalPosition + 1));
-                    rule.addString(id, value);
+                    currentRule.addString(id, value);
                 }
             }
         }
@@ -55,8 +73,11 @@ int main(int argc, char* argv[])
         if(firstWord == "strings:") inStrings = true;
         if(firstWord == "condition:") inCondition = true;
     }
-    conditionLines.erase(remove(conditionLines.begin(), conditionLines.end(), '}'), conditionLines.end());
-    rule.setCondition(trim(conditionLines));
+    if (!currentRule.getRuleName().empty()) {
+        conditionLines.erase(remove(conditionLines.begin(), conditionLines.end(), '}'), conditionLines.end());
+        currentRule.setCondition(trim(conditionLines));
+        rules.push_back(currentRule);
+    }
     ruleFile.close();
 
     int fd = fanotify_init(FAN_CLASS_NOTIF, O_RDONLY);
@@ -73,20 +94,32 @@ int main(int argc, char* argv[])
     }
 
     struct fanotify_event_metadata event;
-    char path[4096];
 
     cout << "Antivirus started on " << directoryPath << " using rule " << rulePath << endl;
 
     while (read(fd, &event, sizeof(event)) > 0) {
         string linkStr = "/proc/self/fd/" + to_string(event.fd);
-        ssize_t len = readlink(linkStr.c_str(), path, 4096);
-        if (len != -1) {
-            path[len] = '\0';
-            string currentFilePath(path);
 
-            if (currentFilePath.find(directoryPath) != string::npos) {
-                if (scanFile(currentFilePath, rule)) {
-                    cout << "[ALERT] Rule matched: " << rule.getRuleName() << " | FILE: " << currentFilePath << endl;
+        // C++23 modern buffer handling
+        // std::string::resize_and_overwrite lets us write directly into the string's internal buffer
+        // and set the exact final size in one operation. This is cleaner and safer than manual resize + data()
+
+        // From the documentation:
+        // "Resizes the string to contain count characters and invokes the operation on the string's buffer."
+        // https://en.cppreference.com/w/cpp/string/basic_string/resize_and_overwrite 
+        // before we juste wrote two 4096, it was not good and can lead to buffer if size differ. 
+
+
+        string currentFilePath;
+        currentFilePath.resize_and_overwrite(4096, [&](char* buf, size_t n) -> size_t {
+            ssize_t len = readlink(linkStr.c_str(), buf, n - 1); // n - 1 we let 1 byte safety margin https://man7.org/linux/man-pages/man2/readlink.2.html, "readlink() does not append a terminating null byte to buf." so we add one
+            return (len > 0) ? static_cast<size_t>(len) : 0;
+        });
+
+        if (currentFilePath.find(directoryPath) != string::npos) {
+            for (auto& r : rules) {
+                if (scanFile(currentFilePath, r)) {
+                    cout << "[ALERT] Rule matched: " << r.getRuleName() << " | FILE: " << currentFilePath << endl;
                 }
             }
         }
