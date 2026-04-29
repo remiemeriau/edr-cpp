@@ -85,7 +85,19 @@ bool scanFile(const string& filePath, Rule& rule) {
         }
     }
 
-    istringstream streamingCondition(rule.getCondition());
+    // improved condition parser now supports single variable like $x
+    // https://en.cppreference.com/w/cpp/string/basic_string/find
+    string cond = trim(rule.getCondition());
+
+    if (cond.empty()) return false;
+
+    // simple case: just one variable
+    if (cond.find(" and ") == string::npos && cond.find(" or ") == string::npos) {
+        return rule.getBool(cond);
+    }
+
+    // classic case with and or or
+    istringstream streamingCondition(cond);
     string mot1, operation, mot2;
     streamingCondition >> mot1 >> operation >> mot2;
 
