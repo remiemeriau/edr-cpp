@@ -1,11 +1,12 @@
 TARGET = antivirus
 CXX = g++
 CXXFLAGS = -Wall -Wextra -g -Iinclude
+LFLAGS = -lpcap
 
 all: $(TARGET)
 
-$(TARGET): src/main.cpp src/yara.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $^
+$(TARGET): src/main.cpp src/yara.cpp src/dpi.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LFLAGS)
 
 clean:
 	rm -f $(TARGET)
