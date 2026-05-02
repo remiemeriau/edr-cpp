@@ -5,7 +5,7 @@ LFLAGS = -lpcap
 
 all: $(TARGET)
 
-$(TARGET): src/main.cpp src/yara.cpp src/dpi.cpp
+$(TARGET): src/main.cpp src/yara.cpp src/dpi.cpp src/ioc.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LFLAGS)
 
 clean:
