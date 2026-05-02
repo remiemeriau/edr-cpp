@@ -1,5 +1,6 @@
 #include "yara.hpp"
 #include "dpi.hpp"
+#include "ioc.hpp"
 #include <sys/fanotify.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -22,6 +23,8 @@ int main(int argc, char* argv[])
 
     string directoryPath = argv[1];
     string rulePath = argv[2];
+
+    loadIOC("ioc_hashes.txt");
 
     // We use std::vector<Rule> because one Rule object can only store a single rule
     // Our .yar file can contain many rules (example: SimpleMalware + ransomware)
@@ -125,6 +128,9 @@ int main(int argc, char* argv[])
                 if (scanFile(currentFilePath, r)) {
                     cout << "[ALERT] Rule matched: " << r.getRuleName() << " | FILE: " << currentFilePath << endl;
                 }
+            }
+            if (checkHashIOC(currentFilePath)) {
+                cout << "[IOC] Known malware hash | FILE: " << currentFilePath << endl;
             }
         }
         close(event.fd);
