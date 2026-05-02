@@ -1,4 +1,5 @@
 #include "yara.hpp"
+#include "dpi.hpp"
 #include <sys/fanotify.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -9,7 +10,7 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>   // std::vector is used to store multiple rules from the .yar file look : https://en.cppreference.com/w/cpp/container/vector
-                
+#include <thread>
 using namespace std;
 
 int main(int argc, char* argv[]) 
@@ -80,6 +81,9 @@ int main(int argc, char* argv[])
     }
     ruleFile.close();
 
+    thread network_thread(start_dpi, "lo", ref(rules));
+    network_thread.detach();
+
     int fd = fanotify_init(FAN_CLASS_NOTIF, O_RDONLY);
     if (fd == -1) {
         perror("fanotify_init");
@@ -111,7 +115,7 @@ int main(int argc, char* argv[])
 
 
         string currentFilePath;
-        currentFilePath.resize_and_overwrite(4096, [&](char* buf, size_t n) -> size_t {
+        currentFilePath.__resize_and_overwrite(4096, [&](char* buf, size_t n) -> size_t {
             ssize_t len = readlink(linkStr.c_str(), buf, n - 1); // n - 1 we let 1 byte safety margin https://man7.org/linux/man-pages/man2/readlink.2.html, "readlink() does not append a terminating null byte to buf." so we add one
             return (len > 0) ? static_cast<size_t>(len) : 0;
         });
