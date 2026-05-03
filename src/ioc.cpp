@@ -1,7 +1,7 @@
 #include "ioc.hpp"
+#include "logger.hpp"
 #include <fstream>
 #include <cstdio>
-#include <iostream>
 
 using namespace std;
 
@@ -13,7 +13,7 @@ void loadIOC(const string& hashes_path) {
     while (getline(f, line))
         ioc_hashes.insert(line);
 
-    cout << "IOC loaded: " << ioc_hashes.size() << " hashes" << endl;
+    log_msg("[IOC] Loaded " + to_string(ioc_hashes.size()) + " hashes");
 }
 
 bool checkHashIOC(const string& filePath) {
