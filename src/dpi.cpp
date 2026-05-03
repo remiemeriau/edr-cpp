@@ -1,5 +1,5 @@
 #include "dpi.hpp"
-#include <iostream>
+#include "logger.hpp"
 #include <pcap.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -97,17 +97,17 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
                 string firstLine = (endLine != string::npos) ? data.substr(0, endLine) : data;
 
                 if (proto == "HTTP") {
-                    cout << "[HTTP] Request: " << firstLine << endl;
-                    
+                    log_msg("[HTTP] Request: " + firstLine);
+
                     // Extract Host header if present
                     size_t hostPos = data.find("Host: ");
                     if (hostPos != string::npos) {
                         size_t hostEnd = data.find("\r\n", hostPos);
-                        cout << "[HTTP] " << data.substr(hostPos, hostEnd - hostPos) << endl;
+                        log_msg("[HTTP] " + data.substr(hostPos, hostEnd - hostPos));
                     }
                 } else {
-                    cout << "[" << proto << "] Alert: " << r.getRuleName() 
-                         << " | SRC: " << inet_ntoa(ip_h->ip_src) << endl;
+                    log_msg("[" + proto + "] Alert: " + r.getRuleName()
+                        + " | SRC: " + string(inet_ntoa(ip_h->ip_src)));
                 }
             }
         }
@@ -121,11 +121,11 @@ void start_dpi(const string& interface, vector<Rule>& rules) {
     pcap_t* handle = pcap_open_live(interface.c_str(), 65535, 1, 100, errbuf);
     
     if (handle == NULL) {
-        cerr << "DPI Error: " << errbuf << endl;
+        log_msg("[ERROR] DPI: " + string(errbuf));
         return;
     }
-    
-    cout << "DPI Network Monitoring started on " << interface << "..." << endl;
+
+    log_msg("[DPI] Network monitoring started on " + interface);
 
     pcap_loop(handle, 0, packet_handler, (u_char*)&rules);
     pcap_close(handle);
