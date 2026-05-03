@@ -1,6 +1,7 @@
 #include "yara.hpp"
 #include "dpi.hpp"
 #include "ioc.hpp"
+#include "logger.hpp"
 #include <sys/fanotify.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -16,8 +17,10 @@ using namespace std;
 
 int main(int argc, char* argv[]) 
 {
+    init_logger();
+
     if (argc < 3) {
-        cerr << "Usage: " << argv[0] << " <directory_path> <rule_path>" << endl;
+        log_msg("Usage: " + string(argv[0]) + " <directory_path> <rule_path>");
         return 1;
     }
 
@@ -36,7 +39,7 @@ int main(int argc, char* argv[])
     vector<Rule> rules;
     ifstream ruleFile(rulePath);
     if (!ruleFile.is_open()) {
-        cerr << "Error: Could not open rule file." << endl;
+        log_msg("[ERROR] Could not open rule file: " + rulePath);
         return 1;
     }
 
@@ -89,20 +92,20 @@ int main(int argc, char* argv[])
 
     int fd = fanotify_init(FAN_CLASS_NOTIF, O_RDONLY);
     if (fd == -1) {
-        perror("fanotify_init");
+        log_msg("[ERROR] fanotify_init failed");
         return 1;
     }
 
     if (fanotify_mark(fd, FAN_MARK_ADD | FAN_MARK_MOUNT, 
                      FAN_CLOSE_WRITE | FAN_EVENT_ON_CHILD, 
                      AT_FDCWD, directoryPath.c_str()) == -1) {
-        perror("fanotify_mark");
+        log_msg("[ERROR] fanotify_mark failed on " + directoryPath);
         return 1;
     }
 
     struct fanotify_event_metadata event;
 
-    cout << "Antivirus started on " << directoryPath << " using rule " << rulePath << endl;
+    log_msg("[EDR] Started on " + directoryPath + " using rule " + rulePath);
 
     while (read(fd, &event, sizeof(event)) > 0) {
         string linkStr = "/proc/self/fd/" + to_string(event.fd);
@@ -126,11 +129,11 @@ int main(int argc, char* argv[])
         if (currentFilePath.find(directoryPath) != string::npos) {
             for (auto& r : rules) {
                 if (scanFile(currentFilePath, r)) {
-                    cout << "[ALERT] Rule matched: " << r.getRuleName() << " | FILE: " << currentFilePath << endl;
+                    log_msg("[ALERT] Rule matched: " + r.getRuleName() + " | FILE: " + currentFilePath);
                 }
             }
             if (checkHashIOC(currentFilePath)) {
-                cout << "[IOC] Known malware hash | FILE: " << currentFilePath << endl;
+                log_msg("[IOC] Known malware hash | FILE: " + currentFilePath);
             }
         }
         close(event.fd);
